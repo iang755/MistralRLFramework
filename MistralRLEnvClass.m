@@ -1,115 +1,119 @@
 classdef MistralRLEnvClass < rl.env.MATLABEnvironment
     properties
 
+        %% Notes
+        % ~ Move Flags to env constructor and set them after calling
+        %   super constructor?
+        % ~ Integrate UserMobility class.
+        % ~ Integrate dynamic map resolution.
+        % ~ Calculate d1 dist in reset function.
 
-        %% state persists many of the dynamic environmental variables
+
         state;
 
-        %plotting variables
-        plotFlag = true;
+        plotFlag;
         Figure = false;
         uavPlot;
         userPlot;
+        centroidPlot;
         connectionPlot;
 
-        numUsers = 2;
+        numUsers;
         numUavs = 1;
         
-        %% environmental Constants.
-        uavHeightRel = 1000;
+        uavHeightRel = 100;
         userHeightRel = 1.5;
         KEDFlag = true;
         freqHz = 160e6;
-            %mapResolution is hardcoded for now will change soon.
+        rewardGivenForLogging;
+
         mapResolution = 400;
         forestCoverOneHot;
         elevMap;
         xVector;
         yVector;
 
-        %% user and uav behavioural flags.
+        centroid;
+        radiusPlot;
+
+        weightedSumReward = false;
+        pathlossWeights = [1.5,1];
+        standardGreatestPathlossReward = true;
+        centroidMeanNormalisedReward = false;
         randomUserMovementFlag = true;
         randomUserMovementChance = 70;
-           % random postions for uavs and users at the start of each
-           % episode
+        pathlossVector;
+
         randomUserPositionFlag = true;
         randomUavPositionFlag = true;
     end
 
+    
+
+
+
+
     methods  
+%% --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+        function this = MistralRLEnvClass(plotFlag,numUsers)
+            actionInfo = rlFiniteSetSpec([1 2 3 4 5 6 7 8]);
 
-        function this = MistralRLEnvClass()
-            %throws error if number of users / uavs arent hardcoded before
-            %being passed to super constructor.
-            numUsers = 2;
-
-            %setting out our 9 actions.
-            actionInfo = rlFiniteSetSpec([1 2 3 4 5 6 7 8 9]);
-
-            %our observations of the state, these data structures contain
-            %data used to train our models.
             uavCoords = rlNumericSpec([1 3]); 
             userDistance = rlNumericSpec([1 numUsers]);
-
-                %Heading angle is essentially the North - South orientation
-                %of user from the drone in radians.
             userAngleHeading =  rlNumericSpec([1 numUsers]);
-
-                %pitch angle is just the angle between the line of sight to
-                %the user and a line straight to the ground from the uav.
             userAnglePitch =    rlNumericSpec([1 numUsers]);
-
-                %d1 not currently being used until I verify if i am using
-                %the LOS_vect function correctly.
             userD1Distance =    rlNumericSpec([1 numUsers]);
 
-            obsInfo(1) = uavCoords;
-            obsInfo(2) = userDistance;
-            obsInfo(3) = userAngleHeading;
-            obsInfo(4) = userAnglePitch;
-            %obsInfo(5) = userD1Distance;
+            %{ oringinal methods 1 * numUsers
+            %obsInfo(1) = userDistance;
+            %obsInfo(2) = userAngleHeading;
+            %obsInfo(3) = userAnglePitch;
+            %}
 
-            %create RL envvironment by calling superclass constructor.
+            %{
+             %2 users input in seperate layers + pathloss also
+            obsInfo(1) = rlNumericSpec([1 1]);
+            obsInfo(2) = rlNumericSpec([1 1]);
+            obsInfo(3) = rlNumericSpec([1 1]);
+            obsInfo(4) = rlNumericSpec([1 1]);
+            obsInfo(5) = rlNumericSpec([1 1]);
+            obsInfo(6) = rlNumericSpec([1 1]);
+            obsInfo(7) = rlNumericSpec([1 1]);
+            obsInfo(8) = rlNumericSpec([1 1]);
+            %}
+
+            obsInfo(1) = rlNumericSpec([1 1]);
+            obsInfo(2) = rlNumericSpec([1 1]);
+            obsInfo(3) = rlNumericSpec([1 1]);
+
+
             this = this@rl.env.MATLABEnvironment(obsInfo,actionInfo);
+
+
+            this.plotFlag = plotFlag;
+            this.numUsers = numUsers;
+
+            validateEnvironment(this)
         end
 
-        %In the case of a Deep Q Network, Models train using the below,
-        %step and reset function like so.
-        %   1. Step() function, i.e. make a move.
-        %   2. Keep making moves until it is time to retrain the network.
-        %   e.g 50 moves.
-        %   3. Use experience to retrain network on batch of experience.
-        %   4. At the end of episode (e.g 500 - 2000).
-        %   5. Reset() function, reset environment to initial (or new
-        %   random state).
-        %   6. Continue to next episode, retain network and experiences.
 
 
-        % Reset environment to initial state and output initial observation
-        %generally after 500 - 2000 moves, which we refer to as steps.
+
+
+
+
+%% --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         function [InitialObservation, LoggedSignal] = reset(this)
-
-            %Actual elevMap and forest cover - taken from orignal mistralRl script.
             [this.forestCoverOneHot, this.elevMap, this.xVector, this.yVector ] = generateTerrain(this.mapResolution);
-        
-            %actual base coords from simulator
             baseCoords = [13200 13200 0];
-        
-            %random uav postion each step.
+
             if this.randomUavPositionFlag
                 uavCoords = randi([0 71],1,2);
                 uavCoords = [uavCoords(1)*this.mapResolution uavCoords(2)*this.mapResolution this.uavHeightRel ];
             else
-                %hardcoded, consistent uav start point.
                 uavCoords = [4000,4000,this.uavHeightRel];
             end 
-            
-            %I will later integrate the UserMobility class but for now
-            %users move randomly with a set chance to move each time the
-            %uav does. 
 
-            %later we can also store and increment a sample time across multiple steps,
-            %so we can move users at appropriate speeds.
             if this.randomUserPositionFlag
                 userCoordsInd = randi([1,70], this.numUsers,2);
                 userCoords = userCoordsInd * this.mapResolution;
@@ -121,8 +125,6 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
                 end
                 userCoords(:,3) = userCoords(:,3)+this.userHeightRel;
             else
-                %initalise all users in same position, purely for testing
-                % exploration policies - ignore.
                 userCoords = zeros(this.numUsers,3);
                 userCoords(:,1) = 24000;
                 userCoords(:,2) = 24000;
@@ -130,9 +132,7 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
                 userCoords(:,3) = userCoords(:,3)+this.userHeightRel;
             end
             
-            %I had my own distance formula written I integrated your
-            %pathloss calcualtions, but my calcs seem to give exact same
-            %values.
+
             userDistance = zeros(1,this.numUsers);
             userAngleHeading = zeros(1,this.numUsers);
             userAnglePitch = zeros(1,this.numUsers);
@@ -142,11 +142,7 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
             end
             userD1Distance = zeros(1,this.numUsers);
             
-            %I had to reformat the step and reset fucntions to a subclass
-            %of RLEnvironment to facilitate the visualisation of training,
-            %this also means this LoggedSignal data structure might not be
-            %needed anymore, will remove later if so for simplicity.
-            LoggedSignal.stepCounter{1} = 1;
+            LoggedSignal.stepCounter{1} = 0;
             LoggedSignal.baseCoords{1} = baseCoords;
             LoggedSignal.uavCoords{1} = uavCoords;
             LoggedSignal.userCoords{1} = userCoords;
@@ -155,13 +151,34 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
             LoggedSignal.userAnglePitch{1} = userAnglePitch;
             LoggedSignal.userD1Distance{1} = userD1Distance;
 
-            LoggedSignal.State{1} = uavCoords;
-            LoggedSignal.State{2} = userDistance;
-            LoggedSignal.State{3} = userAngleHeading;
-            LoggedSignal.State{4} = userAnglePitch;
+            %InitialObservation{1} = userDistance;
+            %InitialObservation{2} = userAngleHeading;
+            %InitialObservation{3} = userAnglePitch;
+            %{
+            InitialObservation{1} = userDistance(1,1);
+            InitialObservation{2} = userAngleHeading(1,1);
+            InitialObservation{3} = userAnglePitch(1,1);
+            InitialObservation{4} = -90;
 
-            InitialObservation = LoggedSignal.State;
+            InitialObservation{5} = userDistance(1,2);
+            InitialObservation{6} = userAngleHeading(1,2);
+            InitialObservation{7} = userAnglePitch(1,2);
+            InitialObservation{8} = -90;
+            %}
+
+
+            this.centroid = [mean(userCoords(:,1)), mean(userCoords(:,2)), this.uavHeightRel ];
+            [centroidDistance, centroidAngleHeading, centroidAnglePitch] = yawPitchDistanceFromCoords(uavCoords,this.centroid);
+
+
+            InitialObservation{1} = centroidDistance;
+            InitialObservation{2} = centroidAngleHeading;
+            InitialObservation{3} = centroidAnglePitch;
+
+
+
             this.state = LoggedSignal;
+
             %for plotting - taken from original mistral script.
             P_Rx_map = zeros(size(this.elevMap,1),size(this.elevMap,2),this.numUavs);
             this.state.max_P_Rx_map{1} = max(P_Rx_map,[],3);
@@ -170,13 +187,15 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
             if this.plotFlag
                 plot(this);
             end
-            
         end
-        
+
+
+
+
+
+
+%% --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         function [NextObs,Reward,IsDone,LoggedSignals] = step(this,Action)
-            clc;
-            %dont worry about this matrix we simply use it increment the
-            %uav Position.
             moveMatrix = [
                 [1 0]
                 [1 1]
@@ -189,20 +208,12 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
                 [0 0]
             ] * this.mapResolution;
 
-        %% Get values of previous state.
             LoggedSignals = this.state;
-            disp("Step Counter")
-            disp(LoggedSignals.stepCounter{1});
             LoggedSignals.stepCounter{1} = LoggedSignals.stepCounter{1}+1;
             
-            previousBaseCoords =        LoggedSignals.baseCoords{1};
             previousUavCoords =         LoggedSignals.uavCoords{1};
             previousUserCoords =        LoggedSignals.userCoords{1};
-        
-        
-        %% move environment variables to next iteration (known as a step).
-            %if no action, try cut down on calculations.
-            %Action Processing.
+
             Action = moveMatrix(Action,:);
             Action = [Action(1) Action(2) 0];
         
@@ -221,10 +232,6 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
             elseif nextUavCoords(2) <  0
                 nextUavCoords(2) = 0;
             end 
-           
-            % Update base Coords - keeping consistent with loggedsignals
-            % they wont change so will remove this later.
-            nextBaseCoords = previousBaseCoords;
         
             nextUserCoords = previousUserCoords;
             
@@ -256,10 +263,6 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
                 end
             end
         
-        
-            %User Distance
-            %User Angle A (Birds eye view angle - known as heading)
-            %User Angle B (Angle to Ground - known as pitch)
             nextUserDistance = zeros(1,this.numUsers);
             nextUserAngleHeading = zeros(1,this.numUsers);
             nextUserAnglePitch = zeros(1,this.numUsers);
@@ -267,52 +270,19 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
             for userCtr = 1:this.numUsers
                 [nextUserDistance(1,userCtr), nextUserAngleHeading(1,userCtr), nextUserAnglePitch(1,userCtr)] = yawPitchDistanceFromCoords(nextUavCoords, nextUserCoords(userCtr,:));
             end
-        
-           
-        
-            %Uav to base connections work fine within the model but I am
-            %going to remove for now until models are training
-            %appropriately.
 
             %% LOS vect seems to give (possible) false positives for LOS, users seem to be always visible.
             [LOS_vect,~,~, ~, nextUserD1Distance,~,~] = get_LOS_vect(this.elevMap, this.forestCoverOneHot, nextUavCoords(:,1), nextUavCoords(:,2), nextUserCoords(:,1),nextUserCoords(:,2), ...
                 this.uavHeightRel,this.userHeightRel,this.mapResolution,this.xVector,this.yVector,this.freqHz,this.KEDFlag );
-        
-            disp("Line of sight boolean from 'LOS_VECT.m'")
-            disp(LOS_vect)
-            disp("Distance from custom function 'yawPitchDistanceFromCoords.m'")
-            disp(nextUserDistance)
-            disp("d1_distances from 'LOS_Vect.m'")
-            disp(nextUserD1Distance)
+       
         
             %nextUserD1Distance = reshape(nextUserD1Distance,1,this.numUsers);
         
-            % vector containing the pathloss metrics for all user
-            % connections, I must 
-            pathlossVector = pathloss_model(nextUserDistance, this.freqHz, LOS_vect);
-        
-            %[baseDistance,~,~] = yawPitchDistanceFromCoords(nextUavCoords, nextBaseCoords);
-            %pathlossVector(end+1) = pathloss_model(baseDistance,this.freqHz);
-            
-            %weighted sum for rewards maybe, worst pathloss - mean pathloss
-            %also.
+            this.pathlossVector = pathloss_model(nextUserDistance, this.freqHz, LOS_vect);
 
-
-            %% Current reward is signal with most pathloss, but this may be causing problems in training with multiple connection scenarios
-            Reward = min(pathlossVector);
-            %% How about a weighted sum e.g ( best pathloss gets weight of 1, 2nd best gets 1.25, worst gets 1.5)
-            
-
-            %IsDone flag will stop an epsisode and activate the reset fucntion,
-            %episodes will reset on their own at a certain amount of steps, but
-            %this flag could be triggered given a certain condition, eg. uav runs
-            %out of fuel.
-            IsDone = false;
+            %works for 1 user no 1 connection
+            %this.pathlossVector = this.pathlossVector - pathloss_model(this.uavHeightRel,this.freqHz);
         
-        
-        %% Return variables for next step.
-        
-            LoggedSignals.baseCoords{1} =       nextBaseCoords;
             LoggedSignals.uavCoords{1} =        nextUavCoords;
             LoggedSignals.userCoords{1} =       nextUserCoords;
             LoggedSignals.userDistance{1} =     nextUserDistance;
@@ -320,29 +290,70 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
             LoggedSignals.userAnglePitch{1} =   nextUserAnglePitch;
             LoggedSignals.userD1Distance{1} =   nextUserD1Distance;
         
-            LoggedSignals.State{1} = nextUavCoords;
-            LoggedSignals.State{2} = nextUserDistance;
-            LoggedSignals.State{3} = nextUserAngleHeading;
-            LoggedSignals.State{4} = nextUserAnglePitch;
-            %LoggedSignals.State{} = nextUserD1Distance;
-            %LoggedSignals.State{} = nextBaseCoords;
-        
-            NextObs = LoggedSignals.State;
-            this.state = LoggedSignals;
+            %NextObs{1} = nextUserDistance;
+            %NextObs{2} = nextUserAngleHeading;
+            %NextObs{3} = nextUserAnglePitch;
             
-            disp("Reward: "+Reward)
-            disp("Uav Position:")
-            disp("    "+nextUavCoords(1)+"    "+nextUavCoords(2)+"    "+nextUavCoords(3))
-            disp("User Postions:")
-            disp(nextUserCoords)
-            disp(newline)
+            %{
+            NextObs{1} = nextUserDistance(1,1);
+            NextObs{2} = nextUserAngleHeading(1,1);
+            NextObs{3} = nextUserAnglePitch(1,1);
+            NextObs{4} = this.pathlossVector(1);
+
+            NextObs{5} = nextUserDistance(1,2);
+            NextObs{6} = nextUserAngleHeading(1,2);
+            NextObs{7} = nextUserAnglePitch(1,2);
+            NextObs{8} = this.pathlossVector(2);
+            %}
+            
+            this.centroid = [mean(nextUserCoords(:,1)), mean(nextUserCoords(:,2)), this.uavHeightRel ];
+            [centroidDistance, centroidAngleHeading, centroidAnglePitch] = yawPitchDistanceFromCoords(nextUavCoords,this.centroid);
+            
+
+            
+            NextObs{1} = centroidDistance;
+            NextObs{2} = centroidAngleHeading;
+            NextObs{3} = centroidAnglePitch;
+
+            this.state = LoggedSignals;
+
+            %% only calculate reward after this point.
+            
+            %{
+            if this.weightedSumReward 
+                Reward = weightedSumRewardFunction(this);
+            elseif this.standardGreatestPathlossReward 
+                Reward = standardRewardFunction(this);
+            elseif this.centroidMeanNormalisedReward
+                Reward = centroidMeanNormalisedRewardFunction(this);
+            end
+            %}
+            Reward = -(centroidDistance);
+            this.rewardGivenForLogging = Reward;
+            %displayStep(this);
             
             %update Plot.
             if this.plotFlag
                 updatePlot(this);
             end
+            IsDone = false;
         end
-        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+%% --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------     
         function plot(this)
             %clf(this.figure, "reset");
             if this.Figure == false
@@ -378,6 +389,11 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
             this.userPlot = plot(this.state.userCoords{1}(:,1), this.state.userCoords{1}(:,2), 'ow', 'MarkerFaceColor','k', 'MarkerSize', 10);
             this.userPlot.XDataSource = "userXCoords";
             this.userPlot.YDataSource = "userYCoords";
+            
+            this.centroidPlot = plot(this.centroid(1,1), this.centroid(1,2),'ow', 'MarkerFaceColor','red', 'MarkerSize', 8);
+            this.centroidPlot.XDataSource = "centroidX";
+            this.centroidPlot.YDataSource = "centroidY";
+
 
             numConnections = this.numUsers * this.numUavs;
             
@@ -389,9 +405,47 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
             yPointsForPlot(2:2:end) = this.state.userCoords{1}(:,2);
 
             this.connectionPlot = plot(xPointsForPlot,yPointsForPlot,"LineWidth",1,"color","black");
-            
+
+            circleRadius = mean(this.state.userDistance{1});
+            circleTheta = linspace(0,2*pi);
+            circleX = circleRadius*cos(circleTheta) + this.state.uavCoords{1}(:,1);
+            circleY = circleRadius*sin(circleTheta) + this.state.uavCoords{1}(:,2);
+            this.radiusPlot = plot(circleX,circleY,"color","blue");
         end
 
+
+%% --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+        function displayStep(this)
+            clc;
+            disp ("Step Number:"+this.state.stepCounter{1})
+            
+            disp("Uav Position:")
+            disp("        "+this.state.uavCoords{1}(1)+"    "+this.state.uavCoords{1}(2)+"    "+this.state.uavCoords{1}(3))
+            disp("        "+round(this.centroid(1))+"    "+round(this.centroid(2))+"    "+this.centroid(3))
+
+
+            disp("User Postions:")
+            disp(this.state.userCoords{1})
+
+            disp("Reward: ");
+            disp("      "+this.rewardGivenForLogging);
+
+            disp("Pathloss Values: ");
+            disp(this.pathlossVector);
+
+            
+            disp("Distance Vect:");
+            disp(this.state.userDistance{1})
+
+            disp("Heading angles:")
+            disp(rad2deg(this.state.userAngleHeading{1}));
+
+            disp("Pitch angles:")
+            disp(rad2deg(this.state.userAnglePitch{1}));
+            disp(newline)
+        end
+
+%% --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         function updatePlot(this)
             %variables must be moved to the base workspace to be used as
             %the data source for plots.
@@ -399,16 +453,19 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
             assignin('base','uavYCoords',this.state.uavCoords{1}(:,2))
             assignin('base','userXCoords',this.state.userCoords{1}(:,1))
             assignin('base','userYCoords',this.state.userCoords{1}(:,2))
+            assignin('base','centroidX',this.centroid(1,1))
+            assignin('base','centroidY',this.centroid(1,2))
             refreshdata(this.uavPlot)
             refreshdata(this.userPlot)
+            refreshdata(this.centroidPlot)
             delete(this.connectionPlot)
+            delete(this.radiusPlot)
 
             %number of connection must adapt to include base connections
             %and multiple uavs connections and there allocated users.
             %will change later to work kmeans allocation of users to uavs.
+            %baseConnections can be seperate plots.
             numConnections = this.numUsers * this.numUavs;
-
-            
 
             xPointsForPlot = zeros(numConnections*2,1);
             yPointsForPlot = zeros(numConnections*2,1);
@@ -419,9 +476,62 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
 
             this.connectionPlot = plot(xPointsForPlot,yPointsForPlot,"LineWidth",1,"color","black");
 
+            circleRadius = mean(this.state.userDistance{1});
+            circleTheta = linspace(0,2*pi);
+            circleX = circleRadius*cos(circleTheta) + this.state.uavCoords{1}(:,1);
+            circleY = circleRadius*sin(circleTheta) + this.state.uavCoords{1}(:,2);
+            this.radiusPlot = plot(circleX,circleY,"color","blue");
+
             drawnow;
         end
-       
+
+%% --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+        function reward = weightedSumRewardFunction(this)
+            reward = 0;
+            sortedPathlossVector = sort(this.pathlossVector);
+            for pathlossCtr = 1:length(this.pathlossVector)
+                reward = reward + sortedPathlossVector(pathlossCtr)*this.pathlossWeights(pathlossCtr);
+            end
+        end
+
+
+
+%% --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+        function reward =  standardRewardFunction(this)
+                reward = min(this.pathlossVector);
+        end
+
+
+%% --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+        function reward = mostPathlossMinusMean(this)
+            reward = min(this.pathlossVector) - mean(this.pathlossVector);
+        end
+
+
+%% --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+        function reward = centroidMeanNormalisedRewardFunction(this)
+            %needs proper testing as standalone function.
+            %user coords data needs to be updated before being called.
+            centroid = [mean(this.state.userCoords(:,1)), mean(this.state.userCoords(:,2)), this.uavHeightRel];
+            distancesFromCentroid = zeros(1,this.numUsers);
+            for userCtr = 1:this.numUsers
+                [distancesFromCentroid(1,userCtr),~,~] = yawPitchDistanceFromCoords(centroid, this.state.userCoords(userCtr,:));
+            end
+            pathlossValuesFromCentroid = pathloss_model(distancesFromCentroid,this.freqHz);
+            reward = min(realPathlossValues) - mean(pathlossValuesFromCentroid);
+        end
+
+%% --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 
     end
 end
+
+
+
+
+
+
+
+

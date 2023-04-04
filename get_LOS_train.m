@@ -9,7 +9,7 @@ R = round(txrx_horiz_distance/map_resolution_m)+1;
 
 if R<2 %txrx_horiz_distance==0 % If UAV is directly above user
     obstacle = 0;
-    tx_coord_ind = round(tx_coord./map_resolution_m)+1;    
+    tx_coord_ind = round(tx_coord./map_resolution_m)+1;
     if tx_rel_height<elev_map(tx_coord_ind(1),tx_coord_ind(2))
         tx_rel_height = elev_map(tx_coord_ind(1),tx_coord_ind(2)) + 10;
     end
