@@ -22,8 +22,6 @@ for tx_ctr = 1:num_tx_locations
         %tx_coord = [tx_coord_x_vect tx_coord_y_vect];
         [obstacle, Path_array_ind, Path_distance, PL_diff,TD] = get_LOS_train([tx_coord_x_vect(tx_ctr) tx_coord_y_vect(tx_ctr)], [rx_coord_x_vect(rx_ctr) rx_coord_y_vect(rx_ctr)],...
             elev_map, x_vector, y_vector, tx_msl_height, rx_height, map_resolution, freq_Hz, KED_flag);
-        disp("sum(obstacle):")
-        disp(sum(obstacle))
         if sum(obstacle)>0 % There are obstacles. Set to 2 to ignore "edge" blockages.
             LOS_vect(tx_ctr, rx_ctr) = 0;
             %first_obstacle_ind = find(obstacle,1);
@@ -54,8 +52,5 @@ end
 radio_horizon = sqrt(((6371000 + (tx_msl_height)).^2 - (6371000)^2)); % LOS horizon distance, ignoring elevation in between
 
 radio_horizon_vect = dist_vect > radio_horizon;
-disp("Radio Horizon Vect:")
-disp(radio_horizon_vect)
 LOS_vect = (LOS_vect | radio_horizon_vect);
-disp("LOS Vect:")
-disp(LOS_vect)
+

@@ -174,6 +174,7 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
             InitialObservation{1} = centroidDistance;
             InitialObservation{2} = centroidAngleHeading;
             InitialObservation{3} = centroidAnglePitch;
+            disp(InitialObservation)
 
 
 
@@ -330,7 +331,7 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
             %}
             Reward = -(centroidDistance);
             this.rewardGivenForLogging = Reward;
-            %displayStep(this);
+            displayStep(this);
             
             %update Plot.
             if this.plotFlag
@@ -426,6 +427,28 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
 
             disp("User Postions:")
             disp(this.state.userCoords{1})
+
+            disp("K-Means Distribution: (2 uav)")
+            if this.numUsers == 1
+                numClusters = 1;
+            else
+                numClusters = 2;
+            end
+            idx = kmeans([this.state.userCoords{1}(:,1),this.state.userCoords{1}(:,2)],numClusters);
+            group1 = [];
+            group2 = [];
+            for userCtr = 1:this.numUsers
+                userGroupAllocation = idx(userCtr);
+                if userGroupAllocation == 1
+                   group1(end+1,:) = this.state.userCoords{1}(userCtr,:);
+                else
+                   group2(end+1,:) = this.state.userCoords{1}(userCtr,:);
+                end
+            end
+            disp("Group 1:")
+            disp(group1)
+            disp("Group 2:")
+            disp(group2)
 
             disp("Reward: ");
             disp("      "+this.rewardGivenForLogging);
