@@ -12,6 +12,7 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
         state;
 
         plotFlag;
+        displayStepFlag = true;
         Figure = false;
         uavPlot;
         userPlot;
@@ -20,9 +21,11 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
 
         numUsers;
         numUavs = 1;
+        %greatestInd
         
-        uavHeightRel = 100;
+        uavHeightRel = 1000;
         userHeightRel = 1.5;
+        baseHeightRel = 20;
         KEDFlag = true;
         freqHz = 160e6;
         rewardGivenForLogging;
@@ -168,13 +171,15 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
 
 
             this.centroid = [mean(userCoords(:,1)), mean(userCoords(:,2)), this.uavHeightRel ];
+
+            [~,grInd] = max(userDistance);
+            this.centroid = userCoords(grInd,:);
             [centroidDistance, centroidAngleHeading, centroidAnglePitch] = yawPitchDistanceFromCoords(uavCoords,this.centroid);
 
 
             InitialObservation{1} = centroidDistance;
             InitialObservation{2} = centroidAngleHeading;
             InitialObservation{3} = centroidAnglePitch;
-            disp(InitialObservation)
 
 
 
@@ -273,8 +278,10 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
             end
 
             %% LOS vect seems to give (possible) false positives for LOS, users seem to be always visible.
-            [LOS_vect,~,~, ~, nextUserD1Distance,~,~] = get_LOS_vect(this.elevMap, this.forestCoverOneHot, nextUavCoords(:,1), nextUavCoords(:,2), nextUserCoords(:,1),nextUserCoords(:,2), ...
-                this.uavHeightRel,this.userHeightRel,this.mapResolution,this.xVector,this.yVector,this.freqHz,this.KEDFlag );
+            [LOS_vect,~,~, PL_diff_vect, nextUserD1Distance,~,~] = get_LOS_vect(this.elevMap, this.forestCoverOneHot, nextUavCoords(:,1), nextUavCoords(:,2), nextUserCoords(:,1),nextUserCoords(:,2), ...
+                this.uavHeightRel,this.userHeightRel,this.mapResolution,this.xVector,this.yVector,this.freqHz, true );
+            disp(LOS_vect)
+            
        
         
             %nextUserD1Distance = reshape(nextUserD1Distance,1,this.numUsers);
@@ -308,6 +315,11 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
             %}
             
             this.centroid = [mean(nextUserCoords(:,1)), mean(nextUserCoords(:,2)), this.uavHeightRel ];
+            
+
+            [~,grInd] = max(nextUserDistance);
+            this.centroid = nextUserCoords(grInd,:);
+            this.centroid(1,3) = 1000;
             [centroidDistance, centroidAngleHeading, centroidAnglePitch] = yawPitchDistanceFromCoords(nextUavCoords,this.centroid);
             
 
@@ -329,9 +341,15 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
                 Reward = centroidMeanNormalisedRewardFunction(this);
             end
             %}
+
+            %change reward to dist from previous greatestInd.
+            %reward = -nextUserdistance(1,this.greatestInd);
             Reward = -(centroidDistance);
             this.rewardGivenForLogging = Reward;
-            displayStep(this);
+
+            if this.displayStepFlag
+                displayStep(this);
+            end
             
             %update Plot.
             if this.plotFlag
@@ -417,7 +435,7 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
 
 %% --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         function displayStep(this)
-            clc;
+            
             disp ("Step Number:"+this.state.stepCounter{1})
             
             disp("Uav Position:")
@@ -427,7 +445,7 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
 
             disp("User Postions:")
             disp(this.state.userCoords{1})
-
+            %{
             disp("K-Means Distribution: (2 uav)")
             if this.numUsers == 1
                 numClusters = 1;
@@ -452,7 +470,7 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
 
             disp("Reward: ");
             disp("      "+this.rewardGivenForLogging);
-
+            %}
             disp("Pathloss Values: ");
             disp(this.pathlossVector);
 

@@ -125,7 +125,7 @@ if nnz(obstacle)>0
             TD.ElevDiffSeg(segCtr) = elev_diff(segInd(bb));
             TD.PLDiffSeg(segCtr) = PL_diff(segInd(bb));            
         end
-        obstacle = zeros(1,length(Path_distance)); % Set obstacles to zero, since NLOS calculations are based on diffraction
+        %obstacle = zeros(1,length(Path_distance)); % Set obstacles to zero, since NLOS calculations are based on diffraction
     else
         PL_diff = zeros(1,length(Path_distance));
     end

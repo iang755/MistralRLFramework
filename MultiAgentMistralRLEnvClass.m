@@ -68,7 +68,7 @@ function this = MultiAgentMistralRLEnvClass(numUavs, numUsers)
         end
 
         function this = runSim(this, episodeCount, stepCount)
-            load("agent1_Trained.mat");
+            load("agent2Long_Trained.mat");
 
             for episodeCtr = 1:episodeCount
                 this = reset(this);
@@ -85,7 +85,7 @@ function this = MultiAgentMistralRLEnvClass(numUavs, numUsers)
                         disp(obs{2})
                         disp(obs{3})
                         disp(obs)
-                        act = getAction(agent1_Trained,obs);
+                        act = getAction(agent2Long_Trained,obs);
                         actionList(uavCtr) = act{1};
                     end
                     this = stepFunc(this,actionList);
@@ -144,15 +144,20 @@ function this = MultiAgentMistralRLEnvClass(numUavs, numUsers)
             
             
             this.uavUserAllocation = zeros(this.numUavs,this.numUsers);
+            
 
             this.uavAllocationIndex = kmeans([this.userCoords(:,1),this.userCoords(:,2)],this.numUavs);
             for userCtr = 1:this.numUsers
                 this.uavUserAllocation(this.uavAllocationIndex(userCtr),userCtr) = 1;
             end
 
+            disp(this.uavUserAllocation);
+            disp("-")
+            disp(this.uavAllocationIndex);
+
             this.centroids = zeros(this.numUavs,3);
             
-            
+            %{
             for uavCtr = 1:this.numUavs
                 xSum = 0;
                 ySum = 0;
@@ -165,6 +170,50 @@ function this = MultiAgentMistralRLEnvClass(numUavs, numUsers)
                     end
                 end
                 this.centroids(uavCtr,:) = [(xSum / usersAllocated), ySum / usersAllocated, this.uavHeightRel];
+            end
+            %}
+            %{
+            disp(this.uavCoords)
+            disp(this.userCoords)
+            for uavCtr = 1:this.numUavs
+                allocatedUserCoords = zeros(1,3);
+                allocatedUserDistances = zeros(1,1);
+                indCounter = 1;
+                for userCtr = 1:this.numUsers
+                    if this.uavUserAllocation(uavCtr,userCtr)
+                        allocatedUserCoords(indCounter,:) = this.userCoords(userCtr,:);
+                        
+                        allocatedUserDistances(uavCtr,indCounter) = userDistance(uavCtr,userCtr);
+                        indCounter = indCounter+1;
+                    end
+                end
+                disp("-")
+                [~,grInd] = max(userDistance(uavCtr,:));
+                disp(grInd)
+                disp(userDistance(uavCtr,:))
+                disp(allocatedUserCoords(1,grInd))
+                this.centroids(uavCtr,:) = allocatedUserCoords(1,grInd);
+                disp(this.centroids)
+
+                
+            end
+            %}
+            for uavCtr = 1:this.numUavs
+                usersAllocated = 0;
+                uavAllocatedUserCoords = zeros(1,3);
+                allocatedUserDistances = zeros(1,1);
+                for userCtr = 1:this.numUsers
+                    if this.uavAllocationIndex(userCtr,1) == uavCtr
+                        uavAllocatedUserCoords(usersAllocated+1,:) = this.userCoords(userCtr,:);
+                        [allocatedUserDistances(1,usersAllocated+1),~,~] = yawPitchDistanceFromCoords(this.uavCoords(uavCtr,:),this.userCoords(userCtr,:));
+                        usersAllocated = usersAllocated + 1;
+                    end
+                end
+                [~,grInd] = max(allocatedUserDistances(1,:));
+                this.centroids(uavCtr,:) = uavAllocatedUserCoords(grInd,:);
+                this.centroids(uavCtr,3) = this.uavHeightRel;
+                disp(usersAllocated);
+                disp(uavAllocatedUserCoords);
             end
 
 
@@ -197,6 +246,7 @@ function this = MultiAgentMistralRLEnvClass(numUavs, numUsers)
 
 %% --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 function this = stepFunc(this,ActionList)
+            disp("step activated")
 
             moveMatrix = [
                 [1 0]
@@ -263,7 +313,7 @@ function this = stepFunc(this,ActionList)
             end
             this.userCoords = nextUserCoords;
         
-
+            %{
             for uavCtr = 1:this.numUavs
                 xSum = 0;
                 ySum = 0;
@@ -276,6 +326,24 @@ function this = stepFunc(this,ActionList)
                     end
                 end
                 this.centroids(uavCtr,:) = [(xSum / usersAllocated), ySum / usersAllocated, this.uavHeightRel];
+            end
+            %}
+            for uavCtr = 1:this.numUavs
+                usersAllocated = 0;
+                uavAllocatedUserCoords = zeros(1,3);
+                allocatedUserDistances = zeros(1,1);
+                for userCtr = 1:this.numUsers
+                    if this.uavAllocationIndex(userCtr,1) == uavCtr
+                        uavAllocatedUserCoords(usersAllocated+1,:) = this.userCoords(userCtr,:);
+                        [allocatedUserDistances(1,usersAllocated+1),~,~] = yawPitchDistanceFromCoords(this.uavCoords(uavCtr,:),this.userCoords(userCtr,:));
+                        usersAllocated = usersAllocated + 1;
+                    end
+                end
+                [~,grInd] = max(allocatedUserDistances(1,:));
+                this.centroids(uavCtr,:) = uavAllocatedUserCoords(grInd,:);
+                this.centroids(uavCtr,3) = this.uavHeightRel;
+                disp(usersAllocated);
+                disp(uavAllocatedUserCoords);
             end
 
             if this.plotFlag
@@ -379,9 +447,11 @@ function this = stepFunc(this,ActionList)
 
             disp("User Postions:")
             disp(this.state.userCoords{1})
-
+            
+            %{
             disp("Reward: ");
             disp("      "+this.rewardGivenForLogging);
+            %}
 
             disp("Pathloss Values: ");
             disp(this.pathlossVector);
