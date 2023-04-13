@@ -1,7 +1,7 @@
 %function [LOS_map, dist_map, radio_horizon] = get_LOS_vect(elev_map, tx_coord_x_vect, tx_coord_y_vect, x_vector, y_vector, tx_msl_height, rx_height, map_resolution)
 function [LOS_vect, dist_vect,radio_horizon, PL_diff_vect, d1_dist_vect, d1_height_vect,forestOnehot_vect] = get_LOS_vect(elev_map, forestCover_onehot, tx_coord_x_vect, tx_coord_y_vect, rx_coord_x_vect, rx_coord_y_vect,...
     tx_msl_height, rx_height, map_resolution, x_vector, y_vector, freq_Hz, KED_flag)
-    obstacleInputs = 3;
+    obstacleInputs = 1;
     num_tx_locations = length(tx_coord_x_vect);
     num_rx_locations = length(rx_coord_x_vect);
     LOS_vect = zeros(num_tx_locations, num_rx_locations);

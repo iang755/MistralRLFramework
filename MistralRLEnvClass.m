@@ -10,6 +10,8 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
 
 
         state;
+        borderSize = 20;
+        borderCorners;
 
         plotFlag;
         displayStepFlag = true;
@@ -18,6 +20,7 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
         userPlot;
         centroidPlot;
         connectionPlot;
+        borderPlot;
 
         numUsers;
         numUavs = 1;
@@ -172,6 +175,32 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
 
             this.centroid = [mean(userCoords(:,1)), mean(userCoords(:,2)), this.uavHeightRel ];
 
+            this.borderCorners = zeros(4,2);
+            borderDisplacementMetres = this.borderSize * this.mapResolution;
+            
+            this.borderCorners(:,1) = uavCoords(1,1);
+            this.borderCorners(:,2) = uavCoords(1,2);
+
+            this.borderCorners(1,:) = this.borderCorners(1,:) + [+borderDisplacementMetres, -borderDisplacementMetres];
+            this.borderCorners(2,:) = this.borderCorners(2,:) + [+borderDisplacementMetres, +borderDisplacementMetres];
+            this.borderCorners(3,:) = this.borderCorners(3,:) + [-borderDisplacementMetres, +borderDisplacementMetres];
+            this.borderCorners(4,:) = this.borderCorners(4,:) + [-borderDisplacementMetres, -borderDisplacementMetres];
+            for cornerCtr = 1:4
+                if this.borderCorners(cornerCtr,1) > 28400
+                    this.borderCorners(cornerCtr,1) = 28400;
+                elseif this.borderCorners(cornerCtr,1) <  400
+                    this.borderCorners(cornerCtr,1) = 400;
+                end 
+            
+                if this.borderCorners(cornerCtr,2) > 28000
+                    this.borderCorners(cornerCtr,2) = 28000;
+                elseif this.borderCorners(cornerCtr,2) <  400
+                    this.borderCorners(cornerCtr,2) = 400;
+                end
+            end
+
+            
+
             [~,grInd] = max(userDistance);
             this.centroid = userCoords(grInd,:);
             [centroidDistance, centroidAngleHeading, centroidAnglePitch] = yawPitchDistanceFromCoords(uavCoords,this.centroid);
@@ -280,7 +309,7 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
             %% LOS vect seems to give (possible) false positives for LOS, users seem to be always visible.
             [LOS_vect,~,~, PL_diff_vect, nextUserD1Distance,~,~] = get_LOS_vect(this.elevMap, this.forestCoverOneHot, nextUavCoords(:,1), nextUavCoords(:,2), nextUserCoords(:,1),nextUserCoords(:,2), ...
                 this.uavHeightRel,this.userHeightRel,this.mapResolution,this.xVector,this.yVector,this.freqHz, true );
-            disp(LOS_vect)
+
             
        
         
@@ -288,7 +317,7 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
         
             this.pathlossVector = pathloss_model(nextUserDistance, this.freqHz, LOS_vect);
 
-            %works for 1 user no 1 connection
+
             %this.pathlossVector = this.pathlossVector - pathloss_model(this.uavHeightRel,this.freqHz);
         
             LoggedSignals.uavCoords{1} =        nextUavCoords;
@@ -346,11 +375,81 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
             %reward = -nextUserdistance(1,this.greatestInd);
             Reward = -(centroidDistance);
             this.rewardGivenForLogging = Reward;
-
+            %{
             if this.displayStepFlag
                 displayStep(this);
             end
+            %}
+
+
+            this.borderCorners = zeros(4,2);
+            borderDisplacementMetres = this.borderSize * this.mapResolution;
             
+            this.borderCorners(:,1) = nextUavCoords(1,1);
+            this.borderCorners(:,2) = nextUavCoords(1,2);
+
+            this.borderCorners(1,:) = this.borderCorners(1,:) + [-borderDisplacementMetres, +borderDisplacementMetres];
+            this.borderCorners(2,:) = this.borderCorners(2,:) + [+borderDisplacementMetres, +borderDisplacementMetres];
+            this.borderCorners(3,:) = this.borderCorners(3,:) + [+borderDisplacementMetres, -borderDisplacementMetres];
+            this.borderCorners(4,:) = this.borderCorners(4,:) + [-borderDisplacementMetres, -borderDisplacementMetres];
+            for cornerCtr = 1:4
+                if this.borderCorners(cornerCtr,1) > 28400
+                    this.borderCorners(cornerCtr,1) = 28400;
+                elseif this.borderCorners(cornerCtr,1) <  400
+                    this.borderCorners(cornerCtr,1) = 400;
+                end 
+            
+                if this.borderCorners(cornerCtr,2) > 28000
+                    this.borderCorners(cornerCtr,2) = 28000;
+                elseif this.borderCorners(cornerCtr,2) <  400
+                    this.borderCorners(cornerCtr,2) = 400;
+                end
+            end
+
+            
+            disp ("Step Number:"+this.state.stepCounter{1})
+            
+            disp("Uav Position:")
+            disp("        "+this.state.uavCoords{1}(1)+"    "+this.state.uavCoords{1}(2)+"    "+this.state.uavCoords{1}(3))
+            disp("        "+round(this.centroid(1))+"    "+round(this.centroid(2))+"    "+this.centroid(3))
+
+
+            disp("User Postions:")
+            disp(this.state.userCoords{1})
+
+            disp("d1 distances");
+            disp(nextUserD1Distance);
+            
+            disp("Los vect:")
+            disp(LOS_vect)
+           
+            disp("Simple Pathloss Values: ");
+            disp(this.pathlossVector);
+
+            disp("pl diff vect")
+            disp(PL_diff_vect);
+
+            disp("Complex Pathloss Values: ");
+            complexPathlossVector = pathloss_model(nextUserDistance, this.freqHz, 1) - PL_diff_vect;
+            disp(complexPathlossVector)
+
+            
+            disp("Distance Vect:");
+            disp(this.state.userDistance{1})
+
+            disp("Heading angles:")
+            disp(rad2deg(this.state.userAngleHeading{1}));
+
+            disp("Pitch angles:")
+            disp(rad2deg(this.state.userAnglePitch{1}));
+
+            disp("Border Corners")
+            disp(this.borderCorners)
+            disp(newline)
+            %}
+
+            
+
             %update Plot.
             if this.plotFlag
                 updatePlot(this);
@@ -423,6 +522,8 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
             xPointsForPlot(2:2:end) = this.state.userCoords{1}(:,1);
             yPointsForPlot(2:2:end) = this.state.userCoords{1}(:,2);
 
+
+
             this.connectionPlot = plot(xPointsForPlot,yPointsForPlot,"LineWidth",1,"color","black");
 
             circleRadius = mean(this.state.userDistance{1});
@@ -430,6 +531,12 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
             circleX = circleRadius*cos(circleTheta) + this.state.uavCoords{1}(:,1);
             circleY = circleRadius*sin(circleTheta) + this.state.uavCoords{1}(:,2);
             this.radiusPlot = plot(circleX,circleY,"color","blue");
+
+
+            c = this.borderCorners;
+            borderXPointsToPlot = [c(1,1),c(2,1),c(2,1),c(3,1),c(3,1),c(4,1),c(4,1),c(1,1)];
+            borderYPointsToPlot = [c(1,2),c(2,2),c(2,2),c(3,2),c(3,2),c(4,2),c(4,2), c(1,2)];
+            this.borderPlot = plot(borderXPointsToPlot,borderYPointsToPlot,"LineWidth",1,"color","yellow");
         end
 
 
@@ -445,32 +552,7 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
 
             disp("User Postions:")
             disp(this.state.userCoords{1})
-            %{
-            disp("K-Means Distribution: (2 uav)")
-            if this.numUsers == 1
-                numClusters = 1;
-            else
-                numClusters = 2;
-            end
-            idx = kmeans([this.state.userCoords{1}(:,1),this.state.userCoords{1}(:,2)],numClusters);
-            group1 = [];
-            group2 = [];
-            for userCtr = 1:this.numUsers
-                userGroupAllocation = idx(userCtr);
-                if userGroupAllocation == 1
-                   group1(end+1,:) = this.state.userCoords{1}(userCtr,:);
-                else
-                   group2(end+1,:) = this.state.userCoords{1}(userCtr,:);
-                end
-            end
-            disp("Group 1:")
-            disp(group1)
-            disp("Group 2:")
-            disp(group2)
-
-            disp("Reward: ");
-            disp("      "+this.rewardGivenForLogging);
-            %}
+           
             disp("Pathloss Values: ");
             disp(this.pathlossVector);
 
@@ -501,6 +583,7 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
             refreshdata(this.centroidPlot)
             delete(this.connectionPlot)
             delete(this.radiusPlot)
+            delete(this.borderPlot)
 
             %number of connection must adapt to include base connections
             %and multiple uavs connections and there allocated users.
@@ -522,6 +605,11 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
             circleX = circleRadius*cos(circleTheta) + this.state.uavCoords{1}(:,1);
             circleY = circleRadius*sin(circleTheta) + this.state.uavCoords{1}(:,2);
             this.radiusPlot = plot(circleX,circleY,"color","blue");
+
+            c = this.borderCorners;
+            borderXPointsToPlot = [c(1,1),c(2,1),c(2,1),c(3,1),c(3,1),c(4,1),c(4,1),c(1,1)];
+            borderYPointsToPlot = [c(1,2),c(2,2),c(2,2),c(3,2),c(3,2),c(4,2),c(4,2), c(1,2)];
+            this.borderPlot = plot(borderXPointsToPlot,borderYPointsToPlot,"LineWidth",1,"color","yellow");
 
             drawnow;
         end
