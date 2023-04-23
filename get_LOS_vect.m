@@ -12,9 +12,8 @@ function [LOS_vect, dist_vect,radio_horizon, PL_diff_vect, d1_dist_vect, d1_heig
     forestOnehot_vect = zeros(num_tx_locations, num_rx_locations,3);
     %LOS_map = zeros(length(x_vector), length(y_vector)) + 2;
     %dist_map = zeros(length(x_vector), length(y_vector));
-    
     for tx_ctr = 1:num_tx_locations
-        for rx_ctr = 1:num_rx_locations        
+        for rx_ctr = 1:num_rx_locations
             %rx_coord = [x_vector(X) y_vector(Y)];
             %tx_coord = [tx_coord_x_vect tx_coord_y_vect];
             [obstacle, Path_array_ind, Path_distance, PL_diff,TD] = get_LOS_train([tx_coord_x_vect(tx_ctr) tx_coord_y_vect(tx_ctr)], [rx_coord_x_vect(rx_ctr) rx_coord_y_vect(rx_ctr)],...
