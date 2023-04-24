@@ -1,3 +1,4 @@
+%Original Author: Lester Ho, Tyndall National Institute.
 function [obstacle, Path_array_ind, Path_distance, PL_diff, TD] = get_LOS_train(tx_coord, rx_coord, elev_map, x_vector, y_vector,tx_rel_height, rx_rel_height, map_resolution_m, freq_Hz, KED_flag)
 txrx_horiz_distance = hypot(tx_coord(1)-rx_coord(1), tx_coord(2)-rx_coord(2));
 m = (tx_coord(2)-rx_coord(2))/(tx_coord(1)-rx_coord(1));

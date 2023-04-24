@@ -1,5 +1,6 @@
 classdef MistralRLEnvClass < rl.env.MATLABEnvironment
     properties
+        %data structures to persist between steps
         state;
 
         plotFlag;
@@ -31,7 +32,7 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
         randomUserMovementChance = 70;
         pathlossVector;
 
-        randomUserPositionFlag = true;
+        randomUserPositionFlag = false;
         randomUavPositionFlag = true;
     end
 
@@ -43,7 +44,7 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
     methods  
 %% --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         function this = MistralRLEnvClass(plotFlag,numUsers)
-            
+            %setting out the shape of the state and action spaces.
             actionInfo = rlFiniteSetSpec([1 2 3 4 5 6 7 8]);
             
             obsInfo(1) = rlNumericSpec([1 1]);
@@ -68,6 +69,7 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
 
 
             this.plotFlag = plotFlag;
+            
             this.numUsers = 3;
             %this.numUsers = numUsers;
 
@@ -82,16 +84,20 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
 
 %% --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         function [InitialObservation, LoggedSignal] = reset(this)
+            this.perfVect = zeros(1,1000);
+            
             [this.forestCoverOneHot, this.elevMap, this.xVector, this.yVector ] = generateTerrain(this.mapResolution);
             baseCoords = [13200 13200 0];
-
+            
+            %Initiate uav and users to random positions.
             if this.randomUavPositionFlag
                 uavCoords = randi([2 69],1,2);
                 uavCoords = [uavCoords(1)*this.mapResolution uavCoords(2)*this.mapResolution this.uavHeightRel ];
             else
                 uavCoords = [4000,4000,this.uavHeightRel];
             end 
-
+           
+            
             if this.randomUserPositionFlag
                 userCoordsInd = randi([1,70], this.numUsers,2);
                 userCoords = userCoordsInd * this.mapResolution;
@@ -108,12 +114,14 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
                 userCoords(:,2) = 24000;
                 userCoords(:,3) = this.elevMap(61,61);
                 userCoords(:,3) = userCoords(:,3)+this.userHeightRel;
+                
             end
             
+
             userDistance = zeros(1,this.numUsers);
             userAngleHeading = zeros(1,this.numUsers);
             userAnglePitch = zeros(1,this.numUsers);
-        
+            %calculate distance, heading and pitch to each user.
             for userCtr = 1:this.numUsers
                 [userDistance(1,userCtr), userAngleHeading(1,userCtr), userAnglePitch(1,userCtr)] = yawPitchDistanceFromCoords(uavCoords, userCoords(userCtr,:));
             end
@@ -127,16 +135,19 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
             LoggedSignal.userAnglePitch{1} = userAnglePitch;
             LoggedSignal.userD1Distance{1} = userD1Distance;
             
-
+            %calculate interference pathloss
             [~,~,~, PL_diff_vect, ~,~,~] = get_LOS_vect(this.elevMap, this.forestCoverOneHot, uavCoords(:,1), uavCoords(:,2), userCoords(:,1),userCoords(:,2), ...
                 this.uavHeightRel,this.userHeightRel,this.mapResolution,this.xVector,this.yVector,this.freqHz, true );
             plVect = zeros(1,this.numUsers);
+            %calculate distance pathloss
             for userCtr = 1:this.numUsers
                 plVect(userCtr) = pathloss_model(userDistance(1,userCtr),this.freqHz,1);
             end
-
+            
+            %order inputs via distance
             [~, furthestUserIndices] = sort(userDistance,'descend');
-
+            
+            %Setup state inputs
             InitialObservation{1} = round(uavCoords(1,1)/1600);
             InitialObservation{2} = round(uavCoords(1,2)/1600);
             
@@ -161,7 +172,8 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
             InitialObservation{12} = round(userCoords(thirdFurthestUserIndex,2)/1600);
             InitialObservation{13} = -PL_diff_vect(1,thirdFurthestUserIndex);
             InitialObservation{14} = plVect(1,thirdFurthestUserIndex);
-
+            
+            %struct used for analysis or metric - reward correlation
             this.state = LoggedSignal;
 
             %for plotting - taken from original mistral script.
@@ -196,7 +208,8 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
             LoggedSignals.stepCounter{1} = LoggedSignals.stepCounter{1}+1;
             previousUavCoords =         LoggedSignals.uavCoords{1};
             previousUserCoords =        LoggedSignals.userCoords{1};
-
+            
+            %Move uav accroding to action and users randomly.
             Action = moveMatrix(Action,:);
             Action = [Action(1) Action(2) 0];
         
@@ -214,6 +227,8 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
             elseif nextUavCoords(2) <  400
                 nextUavCoords(2) = 400;
             end 
+
+
         
             nextUserCoords = previousUserCoords;
             %move users according to (Chance to move -> random movement)
@@ -243,14 +258,19 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
                     end
                 end
             end
+            
+
+
             nextUserDistance = zeros(1,this.numUsers);
             nextUserAngleHeading = zeros(1,this.numUsers);
             nextUserAnglePitch = zeros(1,this.numUsers);
+            %calc dist, heading, pitch
         
             for userCtr = 1:this.numUsers
                 [nextUserDistance(1,userCtr), nextUserAngleHeading(1,userCtr), nextUserAnglePitch(1,userCtr)] = yawPitchDistanceFromCoords(nextUavCoords, nextUserCoords(userCtr,:));
             end
-
+            
+            %calc interference, d1, and d1height for analysis
             [~,~,~, blockagePlVect, nextUserD1Distance,hVect,~] = get_LOS_vect(this.elevMap, this.forestCoverOneHot, nextUavCoords(:,1), nextUavCoords(:,2), nextUserCoords(:,1),nextUserCoords(:,2), ...
                 this.uavHeightRel,this.userHeightRel,this.mapResolution,this.xVector,this.yVector,this.freqHz, true );
         
@@ -262,10 +282,12 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
             LoggedSignals.userD1Distance{1} =   nextUserD1Distance;
             
             distancePlVect = zeros(1,this.numUsers);
+            %calc distance interference
             for userCtr = 1:this.numUsers
                 distancePlVect(userCtr) = pathloss_model(nextUserDistance(1,userCtr),this.freqHz, 1);
             end
-
+            
+            %Order inputs and input state.
             [~, furthestUserIndices] = sort(nextUserDistance,'descend');
 
             
@@ -298,15 +320,17 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
 
 
             this.state = LoggedSignals;          
-
+            %calculate sum of distance and blockage interference
             realPathlossVector = distancePlVect - blockagePlVect;
 
+            %designate reward.
             Reward = min(realPathlossVector);
+            this.perfVect(1,this.state.stepCounter{1}) = Reward;
             if isnan(Reward)
                 Reward = -100;
             end
 
-            clc;
+            
             disp ("Step Number:"+this.state.stepCounter{1})
             disp("observation");
             disp(NextObs);
@@ -349,6 +373,8 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
 
 %% --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------     
         function plot(this)
+            %plotting function was largely adapted from the plotting of the
+            %original mistral script.
             %clf(this.figure, "reset");
             if this.Figure == false
                 this.Figure = figure("Name","Training Visualisation.","NumberTitle","off","Color","[1 1 1]");
@@ -426,10 +452,7 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
             delete(this.connectionPlot)
             delete(this.radiusPlot)
 
-            %number of connection must adapt to include base connections
-            %and multiple uavs connections and there allocated users.
-            %will change later to work kmeans allocation of users to uavs.
-            %baseConnections can be seperate plots.
+
             numConnections = this.numUsers * this.numUavs;
 
             xPointsForPlot = zeros(numConnections*2,1);

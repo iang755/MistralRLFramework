@@ -1,3 +1,5 @@
+%Original Author: Lester Ho, Tyndall National Institute.
+
 function PL_map = pathloss_model(dist_map, freq_Hz, LOS_map)
 
 

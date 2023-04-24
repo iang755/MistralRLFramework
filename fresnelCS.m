@@ -1,3 +1,4 @@
+%Original Author : Lester Ho, Tyndall National Institute
 function [FresnelC,FresnelS] = fresnelCS(y)
 % This function calculates the fresnel cosine and sine integrals.
 % Input:

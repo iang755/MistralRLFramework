@@ -1,3 +1,6 @@
+%ignore, simply used to deploy k means clustering on models that are
+%compatable, using rotating activation of a single model.
+
 classdef MultiAgentMistralRLEnvClass 
     properties
 

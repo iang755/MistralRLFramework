@@ -1,3 +1,4 @@
+%Original Author: Lester Ho, Tyndall National Institute.
 function [LOS_map, dist_map, radio_horizon, FresLoss_map, d1_dist_map, d1_height_map] = get_LOS_maps(elev_map, tx_coord_x_vect, tx_coord_y_vect, x_vector, y_vector,...
     tx_msl_height, rx_height, map_resolution,freq_Hz, KED_flag, user_scanbox_limits_idx)
 
