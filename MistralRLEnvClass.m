@@ -32,7 +32,7 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
         randomUserMovementChance = 70;
         pathlossVector;
 
-        randomUserPositionFlag = false;
+        randomUserPositionFlag = true;
         randomUavPositionFlag = true;
     end
 
@@ -84,7 +84,6 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
 
 %% --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         function [InitialObservation, LoggedSignal] = reset(this)
-            this.perfVect = zeros(1,1000);
             
             [this.forestCoverOneHot, this.elevMap, this.xVector, this.yVector ] = generateTerrain(this.mapResolution);
             baseCoords = [13200 13200 0];
@@ -325,7 +324,6 @@ classdef MistralRLEnvClass < rl.env.MATLABEnvironment
 
             %designate reward.
             Reward = min(realPathlossVector);
-            this.perfVect(1,this.state.stepCounter{1}) = Reward;
             if isnan(Reward)
                 Reward = -100;
             end
